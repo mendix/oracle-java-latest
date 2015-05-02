@@ -12,7 +12,6 @@ set -e
 # packages in the database because this runs from a postinst script, and apt
 # will overwrite the db when it exits.
 
-
 eval $(apt-config shell APT_CONF_D Dir::Etc::parts/d)
 test -n "${APT_CONF_D}" || APT_CONF_D="/etc/apt/apt.conf.d"
 config_file=${APT_CONF_D}/01autoremove-oracle-java
@@ -20,21 +19,17 @@ config_file=${APT_CONF_D}/01autoremove-oracle-java
 eval $(apt-config shell DPKG Dir::bin::dpkg/f)
 test -n "$DPKG" || DPKG="/usr/bin/dpkg"
 
-java_versions="$1"
+if [ ! -e /bin/fuser ]; then
+	echo "WARNING: /bin/fuser is missing, could not generate reliable $config_file"
+	exit
+fi
 
-list="$(${DPKG} -l | awk '/^ii[ ]+oracle-java[0-9]u[0-9]+\-jre/ { print $2 }')"
+java_versions=""
 
-for package in $list; do
-	v=${package##oracle-java}
-	v=${v%%-jre}
-
-	if [ ! -e /bin/fuser ]; then
-		echo "WARNING: /bin/fuser is missing, could not generate reliable $config_file"
-		break
-	fi
-	if /bin/fuser /usr/lib/jvm/jre-$v-oracle-*/bin/java > /dev/null 2>&1; then
+for java_binary in /usr/lib/jvm/*/bin/java; do
+	if /bin/fuser $java_binary > /dev/null 2>&1; then
 		java_versions="$java_versions
-$package"
+$(dpkg -S $java_binary | sed 's/: .*//')"
 	fi
 done
 
